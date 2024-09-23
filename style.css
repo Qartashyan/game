@@ -49,54 +49,5 @@ canvas{
   left: 0;
 }
 
-.clock{
-  display: none;
-  position: relative;
-  width:40px;
-  height: 40px;
-  background-color: antiquewhite;
-  border-radius: 100%;
-  animation: scale 1s infinite ease-in-out;
-}
-.clock::after{
-  content: '+5s';
-  font-size: 10px;
-  border-radius: 100%;
-  display: flex;
-  align-items: center;
-  color: red;
-  position:absolute;
-  width: 16px;
-  height: 16px;
-  right: -8px;
-  top: 0;
-  background-color: gold;
-  z-index: 3;
-}
 
-.clock>svg>g>g>path:last-of-type{
-  fill: red;
-  transform-origin: center;
-  animation: clock 3s infinite linear;
-}
 
-@keyframes clock {
-  from{
-    transform:rotate(0deg);
-  }
-  to{
-    transform:rotate(360deg);
-  }
-}
-
-@keyframes scale {
-  0%{
-    scale:(1)
-  }
-  50%{
-    scale:(1.1)
-  }
-  100%{
-    scale:(1);
-  }
-}

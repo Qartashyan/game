@@ -1,16 +1,15 @@
+import { Game } from "./classes/game.js";
+import { Clock } from "./classes/clock.js";
+import { Ball } from "./classes/ball.js";
+import { AudioProps } from "./classes/audio.js";
 const canvas = document.getElementById("canvas");
 const start = document.getElementById("start");
 const retry = document.getElementById("stop");
 const timerBox = document.querySelector('.timer');
-const clockBox = document.querySelector('.clock');
 const fpsBox = document.querySelector('.fps');
 const ctx = canvas.getContext("2d");
 const screenWidth = window.innerWidth;
 const screenHeight = window.innerHeight;
-const pop = new Audio('./sounds/pop.mp3');
-const gameOver = new Audio('./sounds/gameOver.mp3');
-const clockSound = new Audio('./sounds/clock.mp3');
-const pickupClock = new Audio('./sounds/pickupClock.mp3');
 const clockFace = new Image();
 clockFace.src = './images/clockFace.png';
 const clockArrows = new Image();
@@ -20,12 +19,20 @@ syringe.src = './images/syringe.png';
 const colors = ['red', 'blue', 'pink', 'orange', 'purple', 'yellow', 'gray', 'brown', 'gold'];
 ctx.canvas.width = screenWidth;
 ctx.canvas.height = screenHeight;
-let raf;
+let raf = 1;
 let delta = 0;
 let startTime;
 let isFirstFrame = false;
 let gameStartTimestamp;
-
+const ball = new Ball(
+  1,
+  screenWidth / 2,
+  screenHeight / 2,
+  200,
+  200,
+  screenHeight,
+  screenWidth
+)
 function generateDirection() {
   const direction = Math.floor(Math.random() * 10) - 5;
   if (direction > 0) {
@@ -36,182 +43,51 @@ function generateDirection() {
   }
 }
 
-class Clock {
-  constructor(clockFace, clockArrows, x, y, duration) {
-    this.clockFace = clockFace;
-    this.clockArrows = clockArrows;
-    this.x = x;
-    this.y = y;
-    this.width = 40;
-    this.height = 40;
-    this.show = false;
-    this.duration = duration
+function isPointInObject(e, object) {
+  if ((object.x <= e.offsetX && object.x + object.width >= e.offsetX) && (object.y <= e.offsetY && object.y + object.height >= e.offsetY)) {
+    return true;
   }
-  draw(timestamp) {
-    let time = Math.floor(game.timer + 1 - (timestamp - gameStartTimestamp) / 1000);
-    if (time.toString()[time.toString().length - 1] < this.duration && time.toString()[time.toString().length - 1] > 0) {
-      this.show = true;
-      ctx.save();
-      ctx.beginPath()
-      const background = ctx.arc(this.x + this.width / 2, this.y + this.width / 2, this.width / 2, 0, Math.PI * 2, true);
-      ctx.fillStyle = 'yellow';
-      ctx.fill(background);
-      ctx.closePath()
-      ctx.drawImage(this.clockFace, this.x, this.y, this.width, this.height);
-      ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
-      ctx.rotate(timestamp / 150);
-      ctx.translate(-(this.x + this.width / 2), -(this.y + this.height / 2))
-      ctx.drawImage(this.clockArrows, this.x, this.y, this.width, this.height);
-      ctx.restore();
-    }
-    else {
-      this.show = false;
-      this.x = Math.random() / 1.2 * canvas.width;
-      this.y = Math.random() / 1.2 * canvas.height;
-    }
+  else {
+    return false;
   }
 }
 
-class Ball {
+class Player {
   constructor(
-    id = 1,
-    x = screenWidth / 2,
-    y = screenHeight / 2,
-    vx = 200,
-    vy = 200,
-    depth = 6,
-    color = 'blue',
+    bestTime = 0,
+    depthReducer = 0,
+    poppedBalls = 50,
   ) {
-    this.id = id;
-    this.x = x;
-    this.y = y;
-    this.vx = vx;
-    this.vy = vy;
-    this.depth = depth;
-    this.finalRadius = screenHeight / 18;
-    this.radius = (screenHeight / 10) - (screenHeight / 10 - this.finalRadius) / (depth);
-    this.color = color;
-    this.circle = new Path2D();
-    this.circle.arc(this.x, this.y, this.radius, 0, Math.PI * 2, true);
-    this.colorChange = 5000;
-  };
-  update(timestamp) {
-    if (timestamp > this.colorChange) {
-      this.colorChange = timestamp + 5000;
-      this.color = colors[Math.floor(Math.random() * 10)];
-    }
-    this.x += delta * this.vx / 1000;
-    this.y += delta * this.vy / 1000;
-
-    if (this.y + this.radius > canvas.height) {
-      this.y = canvas.height - this.radius
-    }
-    if (this.x + this.radius > canvas.width) {
-      this.x = canvas.width - this.radius
-    }
-    if (
-      this.y + this.radius >= canvas.height ||
-      this.y < this.radius
-    ) {
-      this.vy = -this.vy;
-    }
-    if (
-      this.x + this.radius >= canvas.width ||
-      this.x < this.radius
-    ) {
-      this.vx = -this.vx;
-    }
-    this.circle = new Path2D();
-    this.circle.arc(this.x, this.y, this.radius, 0, Math.PI * 2, true);
+    this.bestTime = bestTime;
+    this.depthReducer = depthReducer;
+    this.poppedBalls = poppedBalls;
+    this.width = screenWidth / 3;
+    this.height = 50;
+    this.x = screenWidth / 3 - this.width / 2;
+    this.y = screenHeight - this.height
+    this.rect = ctx.rect(this.x, this.y, this.width, this, this.height)
   }
-  draw(ctx) {
+  updateStats() {
+    if (this.poppedBalls === 0) {
+      this.depthReducer += 1;
+      this.poppedBalls = 50;
+    }
+  }
+  draw() {
     ctx.fillStyle = this.color;
-    ctx.fill(this.circle);
-    ctx.stroke(this.circle);
+    ctx.fill(this.rect);
+    ctx.stroke(this.rect);
     ctx.font = `${this.radius}px serif`;
     ctx.fillStyle = 'black'
-    ctx.fillText(this.depth, this.x - this.radius / 4, this.y + this.radius / 4)
-  };
-}
-const clock = new Clock(clockFace, clockArrows, Math.random() / 1.2 * canvas.width, Math.random() * canvas.height / 1.2, 3)
-let balls = [
-  new Ball(
-    1,
-    screenWidth / 2,
-    screenHeight / 2,
-    200,
-    200,
-  )
-];
-
-class Game {
-  constructor(draw, timer) {
-    this.draw = draw;
-    this.timer = timer
-  }
-  requestAnimation() {
-    window.requestAnimationFrame(this.draw)
-  }
-  cancelAnimation() {
-    window.cancelAnimationFrame(raf)
-  }
-  startGame(UIElement) {
-    console.log(balls)
-    UIElement.target.parentElement.style.display = 'none';
-    raf = this.requestAnimation();
-  }
-  pauseGame() {
-    this.cancelAnimation();
-  }
-  resumeGame() {
-    this.requestAnimation();
-  }
-  endGame() {
-    this.timer = 30;
-    setTimeout(() => {
-      if (balls.length === 0) {
-
-      }
-      else {
-        gameOver.play()
-        retry.parentElement.style.display = 'flex';
-      }
-      balls = [
-        new Ball(
-          1,
-          screenWidth / 2,
-          screenHeight / 2,
-          200,
-          200,
-        )
-      ];
-    }, 1000);
-    this.cancelAnimation();
-    isFirstFrame = false;
-  }
-  isTimeEllapsed(timestamp) {
-    let time = Math.floor(this.timer + 1 - (timestamp - gameStartTimestamp) / 1000);
-    timerBox.innerHTML = time;
-    if (time <= 5) {
-      clockSound.play();
-      timerBox.style.color = 'red';
-    }
-    else {
-      timerBox.style.color = 'inherit';
-    }
-    if (time === 0) {
-      return true;
-    }
-    else {
-      return false;
-    }
-  }
-  showFPS() {
-    fpsBox.innerHTML = `FPS: ${Math.floor(1000 / delta)}`;
+    ctx.fillText(this.depthReducer, this.x - this.width / 4, this.y + this.height / 4)
   }
 }
 
-const game = new Game(draw, 30)
+const player = new Player();
+const game = new Game(ctx, raf, draw, 30, screenHeight, screenWidth, player, timerBox, fpsBox,)
+const clock = new Clock(clockFace, clockArrows, Math.random() / 1.2 * canvas.width, Math.random() * canvas.height / 1.2, 3, screenHeight, screenWidth)
+let balls = [ball];
+
 
 function draw(timestamp) {
   if (startTime === undefined) {
@@ -231,16 +107,21 @@ function draw(timestamp) {
   ctx.fill(main)
   ctx.closePath();
   balls.forEach((ball) => {
-    ball.update(timestamp);
+    ball.update(timestamp, delta);
     ball.draw(ctx);
   });
-  clock.draw(timestamp)
+  clock.draw(timestamp, game.timer, gameStartTimestamp, ctx);
+  game.drawPanel();
+  player.updateStats();
   startTime = timestamp;
   if (Math.floor(timestamp) % 5 === 0) {
-    game.showFPS();
+    game.showFPS(delta);
   }
-  if (game.isTimeEllapsed(timestamp)) {
-    game.endGame();
+  if (game.isTimeEllapsed(timestamp, gameStartTimestamp)) {
+    game.endGame(balls, raf, retry);
+    player.poppedBalls = 50
+    isFirstFrame = false;
+    balls = [ball]
   }
   else {
     raf = window.requestAnimationFrame(draw);
@@ -249,15 +130,32 @@ function draw(timestamp) {
 
 start.addEventListener("click", (e) => game.startGame(e));
 retry.addEventListener("click", (e) => game.startGame(e));
-
-canvas.addEventListener("pointerdown", function (e) {
+function onPointerDown(e) {
   const random = Math.floor(Math.random() * 10);
+  game.panelItems.forEach((item) => {
+    //     const object =
+    if (isPointInObject(e, { x: item.x, y: game.screenHeight - game.panelHeight, width: item.width, height: game.panelHeight })) {
+      if (item.name === 'depthReducer' && player.depthReducer > 0) {
+        balls.forEach((ball, index) => {
+          ball.depth -= 1;
+          if (ball.depth < 1) {
+            delete balls[index]
+          }
+        })
+        player.depthReducer -= 1
+      }
+    }
+  })
+
   let lastIndex = -1;
 
-  if (clock.show && (clock.x <= e.offsetX && clock.x + clock.width >= e.offsetX) && (clock.y <= e.offsetY && clock.y + clock.height >= e.offsetY)) {
-    pickupClock.play();
+  if (clock.show && isPointInObject(e, clock)) {
+    new AudioProps('pickupClock').play();
     game.timer += 5;
   }
+  // else if(){
+
+  // }
   else {
     balls.forEach((ball, index) => {
       if (ctx.isPointInPath(ball.circle, e.offsetX, e.offsetY)) {
@@ -269,47 +167,61 @@ canvas.addEventListener("pointerdown", function (e) {
 
   if (clickedBall) {
     if (clickedBall.color === "red") {
-      game.endGame();
+      game.endGame(balls, raf, retry);
+      isFirstFrame = false;
+      player.poppedBalls = 50;
+      player.depthReducer = 0;
+      balls = [ball];
     }
     else {
-      pop.load();
-      pop.play();
-    }
+      // pop.load();
+      // pop.play()
+      clickedBall.audio.play()
 
-    let color1;
-    let color2;
+      player.poppedBalls -= 1;
 
-    if (random > 8) {
-      color1 = "red";
-    } else {
-      color1 = clickedBall.color;
-    }
-    if (random < 2) {
-      color2 = "red";
-    } else {
-      color2 = clickedBall.color;
-    }
-    balls.splice(lastIndex, 1);
-    if (clickedBall.depth > 1) {
-      const newBall1 = new Ball(
-        clickedBall.id + 4 * random,
-        clickedBall.x + 12 * random,
-        clickedBall.y + 14 * random,
-        generateDirection() * (clickedBall.vx + 1),
-        generateDirection() * (clickedBall.vy + 1),
-        clickedBall.depth - 1,
-        color1,
-      );
-      const newBall2 = new Ball(
-        clickedBall.id + 5 * random,
-        clickedBall.x + 15 * random,
-        clickedBall.y + 15 * random,
-        generateDirection() * (clickedBall.vx + 1),
-        generateDirection() * (clickedBall.vy + 1),
-        clickedBall.depth - 1,
-        color2,
-      );
-      balls.push(newBall1, newBall2);
+      let color1;
+      let color2;
+
+      if (random > 8) {
+        color1 = "red";
+      } else {
+        color1 = clickedBall.color;
+      }
+      if (random < 2) {
+        color2 = "red";
+      } else {
+        color2 = clickedBall.color;
+      }
+      balls.splice(lastIndex, 1);
+      if (clickedBall.depth > 1) {
+        const newBall1 = new Ball(
+          clickedBall.id + 4 * random,
+          clickedBall.x + 12 * random,
+          clickedBall.y + 14 * random,
+          generateDirection() * (clickedBall.vx + 1),
+          generateDirection() * (clickedBall.vy + 1),
+          screenHeight,
+          screenWidth,
+          clickedBall.depth - 1,
+          color1,
+        );
+        const newBall2 = new Ball(
+          clickedBall.id + 5 * random,
+          clickedBall.x + 15 * random,
+          clickedBall.y + 15 * random,
+          generateDirection() * (clickedBall.vx + 1),
+          generateDirection() * (clickedBall.vy + 1),
+          screenHeight,
+          screenWidth,
+          clickedBall.depth - 1,
+          color2,
+        );
+        balls.push(newBall1, newBall2);
+      }
     }
   }
-});
+}
+
+
+canvas.addEventListener("pointerdown", onPointerDown)
